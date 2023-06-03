@@ -1,89 +1,10 @@
 import * as THREE from 'three'
-// import * as kokomi from "kokomi.js"
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import * as kokomi from 'kokomi.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
-import { TextureLoader } from 'three'
-import { Reflector } from 'three/addons/objects/Reflector.js';
-import { RectAreaLightHelper } from 'three/addons/helpers/RectAreaLightHelper.js'
-import { Refractor } from 'three/addons/objects/Refractor.js'
-import { WaterRefractionShader } from 'three/addons/shaders/WaterRefractionShader.js'
-import { Water } from 'three/addons/objects/Water2.js'
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
-
-const scene = new THREE.Scene()
-scene.background = new THREE.Color('#e1e1e1')
-// scene.background = new THREE.Color('#000')
-
-// lights
-
-const spotLightIntensivity = 0.8
-const spotLightColor = 0xbeb8b1
-const spotLightAngle = Math.PI/8
-
-// lamp
-// rgb(249, 229, 189)
-
-const rLight1 = new THREE.RectAreaLight('rgb(85, 184, 255)', 150, 19.1, 0.2)
-rLight1.position.set(0, 8.066, -9.1)
-rLight1.rotation.set((90 * Math.PI) / 180, (180 * Math.PI) / 180, 0)
-scene.add(rLight1)
-
-// const rectLightHelper = new RectAreaLightHelper( rLight1 )
-// rLight1.add( rectLightHelper )
-
-const lampGeomentry = new THREE.BoxGeometry(19.1, 0.2, 0.2)
-const lampMaterial = new THREE.MeshStandardMaterial({
-    color: 'rgb(85, 184, 255)',
-    emissive: 'rgb(85, 184, 255)',
-    emissiveIntensity: 10
-});
-const lamp = new THREE.Mesh( lampGeomentry, lampMaterial );
-lamp.position.set(0, 8.066, -9.1)
-scene.add( lamp )
-
-// textrures
-const txLoader = new TextureLoader()
-
-const brickTexture = txLoader.load('/assets/textures/brick-normal2.jpg')
-brickTexture.center = new THREE.Vector2(0.5, 0.5)
-brickTexture.repeat.set(5, 8)
-brickTexture.wrapS = THREE.RepeatWrapping
-brickTexture.wrapT = THREE.RepeatWrapping
-brickTexture.rotation = (90 * Math.PI) / 180
-
-// floor textures
-const asphaltRoughes = txLoader.load('/assets/textures/asphalt-pbr01/roughness.jpg')
-asphaltRoughes.wrapS = THREE.RepeatWrapping
-asphaltRoughes.wrapT = THREE.RepeatWrapping
-
-const asphaltOpacity = txLoader.load('/assets/textures/asphalt-pbr01/opacity.jpg')
-asphaltOpacity.wrapS = THREE.RepeatWrapping
-asphaltOpacity.wrapT = THREE.RepeatWrapping
-
-const asphaltNormal = txLoader.load('/assets/textures/asphalt-pbr01/normal.png')
-asphaltNormal.wrapS = THREE.RepeatWrapping
-asphaltNormal.wrapT = THREE.RepeatWrapping
-
-// shutter textures
-const shutterDiffuse = txLoader.load('/assets/textures/door/shutter-Diffuse.png')
-shutterDiffuse.flipY = !1
-
-const shutterGlossiness = txLoader.load('/assets/textures/door/shutter-Glossiness.png')
-shutterGlossiness.flipY = !1
-
-const shutterNormal = txLoader.load('/assets/textures/door/shutter-Normal.png')
-shutterNormal.flipY = !1
-
-// top cover textures
-const topCoverDiffuse = txLoader.load('/assets/textures/door/top-cover-Diffuse.png')
-
-// side cover textures
-const sideCoverDiffuse = txLoader.load('/assets/textures/door/side-cover-Diffuse.png')
-
-const rainNormal = txLoader.load('/assets/textures/rain-normal.png')
+import { BloomEffect, EffectComposer, EffectPass, RenderPass, FXAAEffect } from 'postprocessing'
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js'
+import { Howl, Howler } from 'howler'
+import gsap from 'gsap'
 
 const vertexShader = `
 uniform mat4 textureMatrix;
@@ -290,220 +211,654 @@ void main(){
 }
 `;
 
-let geometry, material;
+const vertexShader2 = `
+#define GLSLIFY 1
+attribute float aProgress;
+attribute float aSpeed;
 
-geometry = new THREE.CircleGeometry( 40, 64 );
-const groundMirror = new Reflector( geometry, {
-    clipBias: 0.003,
-    textureWidth: window.innerWidth * window.devicePixelRatio,
-    textureHeight: window.innerHeight * window.devicePixelRatio,
-    color: 0xb5b5b5
-} );
-groundMirror.position.y = 0.5
-groundMirror.rotateX( - Math.PI / 2 )
-groundMirror.material.uniforms = {
-    uNormalTexture: {
-        value: asphaltNormal,
-      },
-      uOpacityTexture: {
-        value: asphaltOpacity,
-      },
-      uRoughnessTexture: {
-        value: asphaltRoughes,
-      },
-      uRainCount: {
-        value: 10,
-      },
-      uTexScale: {
-        value: new THREE.Vector2(1, 4),
-      },
-      uTexOffset: {
-        value: new THREE.Vector2(1, -0.5),
-      },
-      uDistortionAmount: {
-        value: 0.25,
-      },
-      uBlurStrength: {
-        value: 8,
-      },
-      uMipmapTextureSize: {
-        value: new THREE.Vector2(window.innerWidth, window.innerHeight),
-      },
+varying vec3 vNormal;
+varying vec2 vUv;
+varying vec3 vWorldPosition;
+varying vec3 vPosition;
+varying vec2 vScreenSpace;
+varying vec3 vViewPosition;
+
+uniform float uTime;
+uniform float uSpeed;
+uniform float uHeightRange;
+
+void main()	{
+    vUv = uv;
+
+    vec3 transformed = vec3( position );
+
+    vec3 up = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
+    vec3 right = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
+    vec3 billboardPos = right * position.x + up * position.y;
+
+    vec4 mvPosition = vec4( billboardPos, 1.0 );
+
+    float yPos = mod(aProgress - uTime * aSpeed * 0.25, 1.) * uHeightRange - (uHeightRange * 0.5);
+    // float yPos = mod(aProgress, 1.) * 20. - 10.;
+
+    vec4 worldPosition = vec4( transformed, 1.0 );
+    #ifdef USE_INSTANCING
+        worldPosition = instanceMatrix * worldPosition;
+    #endif
+    worldPosition.y += yPos;
+    worldPosition = modelMatrix * worldPosition;
+    vWorldPosition = worldPosition.xyz;
+
+    vPosition = transformed;
+
+    #ifdef USE_INSTANCING
+        mvPosition = instanceMatrix * mvPosition;
+    #endif
+
+    mvPosition.y += yPos;
+
+    vec4 earlyProjection = projectionMatrix * modelViewMatrix * mvPosition;
+    vScreenSpace = earlyProjection.xy / earlyProjection.w * 0.5 + vec2(0.5);
+
+    mvPosition = modelViewMatrix * mvPosition;
+    gl_Position = projectionMatrix * mvPosition;
+
+    vViewPosition = -mvPosition.xyz;
 }
-groundMirror.material.vertexShader = vertexShader
-groundMirror.material.fragmentShader = fragmentShader
-scene.add( groundMirror )
+`;
 
-console.log(groundMirror)
+const fragmentShader2 = `
+#define GLSLIFY 1
+varying vec3 vNormal;
+varying vec2 vUv;
+varying vec2 vScreenSpace;
+varying vec3 vViewPosition;
 
-// Central
-// const pLight1 = new THREE.PointLight('rgb(189, 229, 249)', .1, 17, .8)
-// pLight1.position.y = 2.3
-// scene.add(pLight1)
+uniform sampler2D uBgTexture;
+uniform sampler2D uNormalTexture;
+uniform float uBaseBrightness;
+uniform float uRefraction;
 
-// const pLight1Helper = new THREE.PointLightHelper(pLight1)
-// scene.add(pLight1Helper)
+void main() {
+    vec4 normalColor = texture2D(uNormalTexture, vUv);
 
-// Top ambient
-const pLight2 = new THREE.PointLight('rgb(189, 229, 249)', 20, 30)
-pLight2.position.y = 30
-pLight2.position.z = 0
-scene.add(pLight2)
+    if (normalColor.a < 0.5) discard;
 
-// MY LIGHT
-const spotLight = new THREE.SpotLight(spotLightColor, spotLightIntensivity, 0, spotLightAngle)
-spotLight.position.set(0, 100, 0)
-scene.add(spotLight)
+    vec3 normal = normalize(normalColor.rgb * 2. - 1.);
 
-const helperLight = new THREE.SpotLightHelper(spotLight)
-scene.add(helperLight)
+    vec2 uv = vUv;
+    uv = normal.xy;
+    uv = vec2(vScreenSpace.x, vScreenSpace.y) + uv * uRefraction;
 
-const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 )
+    vec4 bgColor = texture2D(uBgTexture, uv);
 
-const renderer = new THREE.WebGLRenderer({alpha: true, antialias: true})
-renderer.shadowMap.enabled = true
-renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.outputColorSpace = THREE.LinearSRGBColorSpace
-renderer.toneMapping = THREE.ReinhardToneMapping
-document.body.appendChild(renderer.domElement)
-
-const controls = new OrbitControls( camera, renderer.domElement )
-
-camera.position.set( 0, 1, 10 )
-controls.update()
-
-
-
-// model
-const gtlfLoader = new GLTFLoader()
-const url = '/assets/models/scene.glb'
-gtlfLoader.load(url, gltf => {
-    const root = gltf.scene
-
-    root.traverse(child => {
-        if (child.type === 'Mesh') {
-
-            // console.log(child)
-
-            if (child.name === 'walls') {
-                child.material = new THREE.MeshPhongMaterial({
-                    color: new THREE.Color("rgb(73, 73, 73)"),
-                    normalMap: brickTexture,
-                    normalScale: new THREE.Vector2(0.5, 0.5),
-                    shininess: 50
-                })
-            }
-
-            if (child.name === 'floor') {
-
-                
-
-				// const waterGeometry = new THREE.PlaneGeometry( 60, 60 )
-
-				// const water = new Water(waterGeometry, {
-				// 	scale: 1,
-				// 	textureWidth: 1024,
-				// 	textureHeight: 1024,
-                //     flowMap: asphaltNormal,
-				// })
-
-				// water.position.y = 0.01;
-				// water.rotation.x = Math.PI * - 0.5;
-				// scene.add( water )
-
-                // child.material = new THREE.ShaderMaterial({
-                //     uniforms: {
-                //         uBlurStrength: {value: 6.3},
-                //         uDiffuse: {value: null},
-                //         uDistortionAmount: {value: 0.1},
-                //         uMipmapTextureSize: {value: new THREE.Vector2(960, 100)},
-                //         uNormalTexture: {value: asphaltNormal},
-                //         uOpacityTexture: {value: asphaltOpacity},
-                //         uRoughnessTexture: {value: asphaltRoughes},
-                //         uTexScale: {value: new THREE.Vector2(1.38, 4.07)},
-                        // uTexture: {value: rainNormal},
-                        // uRainCount: {value: 2000},
-                        // uTime: {value: 236},
-                        // uTextureMatrix: {
-                        //     value: {
-                        //         elements: [
-                        //             -0.22211520908501786,
-                        //             -0.11459721405228997,
-                        //             -0.22930908264590286,
-                        //             -0.22919442810457988,
-                        //             0.033524893525413005,
-                        //             -0.6768219095099023,
-                        //             0.07076431399569552,
-                        //             0.07072893183869766,
-                        //             -0.46015427455785834,
-                        //             -0.5372906695906712,
-                        //             -0.9712932137007475,
-                        //             -0.970807567093897,
-                        //             4.606895512492968,
-                        //             3.1090655113895247,
-                        //             8.674987790478738,
-                        //             9.1706502965835
-                        //         ]
-                        //     }
-                        // }
-
-                //     },
-                //     vertexShader: document.getElementById('vertexshader').textContent,
-                //     fragmentShader: document.getElementById('fragmentshader').textContent,
-                // })
-
-                // console.log(child.material)
-            }
-
-            if (child.name === 'shutter') {
-                child.material = new THREE.MeshPhysicalMaterial({
-                    map: shutterDiffuse,
-                    roughnessMap: shutterGlossiness,
-                    normalMap: shutterNormal,
-                    reflectivity: 0.8,
-                    roughness: 0.5,
-                    metalness: 0.3,
-                    specularIntensity: 0.5
-                })
-
-                
-            }
-
-            if (child.name === 'top-cover') {
-                child.material = new THREE.MeshPhysicalMaterial({
-                    map: topCoverDiffuse,
-                    reflectivity: 0.7,
-                    metalness: 0.2,
-                    specularIntensity: 0.5
-                })
-            }
-
-            if (child.name === 'side-cover') {
-                child.material = new THREE.MeshPhysicalMaterial({
-                    map: sideCoverDiffuse,
-                    reflectivity: 0.7,
-                    metalness: 0.2,
-                    specularIntensity: 0.5
-                })
-            }
-        }
-    })
-
-    scene.add(root)
-})
-
-function animate() {
-
-	requestAnimationFrame( animate )
-    controls.update()
-	renderer.render( scene, camera )
-    
+    // vec3 rainColor = vec3(0.89, 0.92, 1.);
+    // gl_FragColor = vec4(rainColor, 1.);
+    gl_FragColor = vec4(bgColor.rgb + uBaseBrightness * pow(normal.b, 10.), 1.);
+    // gl_FragColor = vec4(normal.rgb, 1.);
 }
-animate()
+`;
 
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight
-    camera.updateProjectionMatrix()
+let mouseX = 0,
+  mouseY = 0,
+  isSlowMo = false,
+  flag = false
 
-    renderer.setSize(window.innerWidth, window.innerHeight)
-})
+window.addEventListener("mousemove", (event) => {
+  mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+  mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+});
+
+window.addEventListener("mousedown", () => {
+  isSlowMo = true
+  flag = true
+});
+
+window.addEventListener("mouseup", () => {
+  isSlowMo = false
+  flag = true
+});
+
+class RainFloor extends kokomi.Component {
+  constructor(base, config = {}) {
+    super(base);
+
+    const { count = 1000 } = config;
+
+    const am = this.base.am;
+
+    // floor
+    const fNormalTex = am.items["floor-normal"];
+    const fOpacityTex = am.items["floor-opacity"];
+    const fRoughnessTex = am.items["floor-roughness"];
+    fNormalTex.wrapS = fNormalTex.wrapT = THREE.MirroredRepeatWrapping;
+    fOpacityTex.wrapS = fOpacityTex.wrapT = THREE.MirroredRepeatWrapping;
+    fRoughnessTex.wrapS = fRoughnessTex.wrapT = THREE.MirroredRepeatWrapping;
+
+    // custom reflector
+    const uj = new kokomi.UniformInjector(this.base);
+    this.uj = uj;
+    const mirror = new kokomi.Reflector(new THREE.PlaneGeometry(25, 100));
+    this.mirror = mirror;
+    mirror.position.z = -25;
+    mirror.rotation.x = -Math.PI / 2;
+
+    // console.log(uj)
+
+    mirror.material.uniforms = {
+      ...mirror.material.uniforms,
+      ...uj.shadertoyUniforms,
+      ...{
+        uNormalTexture: {
+          value: fNormalTex,
+        },
+        uOpacityTexture: {
+          value: fOpacityTex,
+        },
+        uRoughnessTexture: {
+          value: fRoughnessTex,
+        },
+        uRainCount: {
+          value: count,
+        },
+        uTexScale: {
+          value: new THREE.Vector2(1, 4),
+        },
+        uTexOffset: {
+          value: new THREE.Vector2(1, -0.5),
+        },
+        uDistortionAmount: {
+          value: 0.25,
+        },
+        uBlurStrength: {
+          value: 8,
+        },
+        uMipmapTextureSize: {
+          value: new THREE.Vector2(window.innerWidth, window.innerHeight),
+        },
+      },
+    };
+    mirror.material.vertexShader = vertexShader;
+    mirror.material.fragmentShader = fragmentShader;
+
+    const mipmapper = new kokomi.PackedMipMapGenerator();
+    this.mipmapper = mipmapper;
+    const mirrorFBO = mirror.getRenderTarget();
+    this.mirrorFBO = mirrorFBO;
+    const mipmapFBO = new kokomi.FBO(this.base);
+    this.mipmapFBO = mipmapFBO;
+
+    mirror.material.uniforms.tDiffuse.value = mipmapFBO.rt.texture;
+  }
+  addExisting() {
+    this.base.scene.add(this.mirror);
+  }
+  update() {
+    this.uj.injectShadertoyUniforms(this.mirror.material.uniforms);
+
+    this.mipmapper.update(
+      this.mirrorFBO.texture,
+      this.mipmapFBO.rt,
+      this.base.renderer
+    );
+  }
+}
+
+class Rain extends kokomi.Component {
+  constructor(base, config = {}) {
+    super(base);
+
+    const { count = 1000, speed = 1.5, debug = false } = config;
+
+    const am = this.base.am;
+
+    // rain
+    const rNormalTex = am.items["rain-normal"];
+    rNormalTex.flipY = false;
+
+    const uj = new kokomi.UniformInjector(this.base);
+
+    this.uj = uj;
+    const rainMat = new THREE.ShaderMaterial({
+      vertexShader: vertexShader2,
+      fragmentShader: fragmentShader2,
+      uniforms: {
+        ...uj.shadertoyUniforms,
+        ...{
+          uHeightRange: {
+            value: 20,
+          },
+          uNormalTexture: {
+            value: rNormalTex,
+          },
+          uBgTexture: {
+            value: null,
+          },
+          uBgRt: {
+            value: null,
+          },
+          uRefraction: {
+            value: 0.05,
+          },
+          uBaseBrightness: {
+            value: 0.07,
+          },
+          uTime: {
+            value: 0,
+          },
+        },
+      },
+    });
+    this.rainMat = rainMat;
+
+    const rain = new THREE.InstancedMesh(
+      new THREE.PlaneGeometry(),
+      rainMat,
+      count
+    );
+    this.rain = rain;
+    rain.instanceMatrix.needsUpdate = true;
+
+    const dummy = new THREE.Object3D();
+
+    const progressArr = [];
+    const speedArr = [];
+
+    for (let i = 0; i < rain.count; i++) {
+      dummy.position.set(
+        THREE.MathUtils.randFloat(-10, 10),
+        0,
+        THREE.MathUtils.randFloat(-20, 10)
+      );
+      dummy.scale.set(0.03, THREE.MathUtils.randFloat(0.3, 0.5), 0.03);
+      if (debug) {
+        dummy.scale.setScalar(1);
+        rainMat.uniforms.uSpeed.value = 0;
+      }
+      dummy.updateMatrix();
+      rain.setMatrixAt(i, dummy.matrix);
+
+      progressArr.push(Math.random());
+      speedArr.push(dummy.scale.y * 10);
+    }
+    rain.rotation.set(-0.1, 0, 0.1);
+    rain.position.set(0, 9, 9);
+
+    rain.geometry.setAttribute(
+      "aProgress",
+      new THREE.InstancedBufferAttribute(new Float32Array(progressArr), 1)
+    );
+    rain.geometry.setAttribute(
+      "aSpeed",
+      new THREE.InstancedBufferAttribute(new Float32Array(speedArr), 1)
+    );
+
+    const bgFBO = new kokomi.FBO(this.base, {
+      width: window.innerWidth * 0.1,
+      height: window.innerHeight * 0.1,
+    });
+    this.bgFBO = bgFBO;
+    rainMat.uniforms.uBgTexture.value = bgFBO.rt.texture;
+
+    const fboCamera = this.base.camera.clone();
+    this.fboCamera = fboCamera;
+  }
+  addExisting() {
+    this.base.scene.add(this.rain);
+  }
+  update() {
+    this.uj.injectShadertoyUniforms(this.rainMat.uniforms);
+
+    this.rain.visible = false;
+    this.base.renderer.setRenderTarget(this.bgFBO.rt);
+    this.base.renderer.render(this.base.scene, this.fboCamera);
+    this.base.renderer.setRenderTarget(null);
+    this.rain.visible = true;
+  }
+}
+
+class Sketch extends kokomi.Base {
+  create() {
+    this.camera.position.set(0, 2, 9);
+
+    const lookAt = new THREE.Vector3(0, 2, 0);
+    this.camera.lookAt(lookAt);
+
+    const controls = new kokomi.OrbitControls(this);
+    controls.controls.target = lookAt;
+    controls.controls.enabled = false;
+
+    // config
+    const config = {
+      rainCount: 1000,
+      slowMoFactor: 1,
+      rainSpeed: 1.5,
+      debug: false,
+      soundRate: 1,
+      cameraZOffset: 10,
+    };
+
+    const am = new kokomi.AssetManager(this, [
+      // brick
+      {
+        name: "brick-normal",
+        type: "texture",
+        path: "/assets/textures/brick-normal2.jpg",
+      },
+      // floor
+      {
+        name: "floor-normal",
+        type: "texture",
+        path: "/assets/textures/asphalt-pbr01/normal.png",
+      },
+      {
+        name: "floor-opacity",
+        type: "texture",
+        path: "/assets/textures/asphalt-pbr01/opacity.jpg",
+      },
+      {
+        name: "floor-roughness",
+        type: "texture",
+        path: "/assets/textures/asphalt-pbr01/roughness.jpg",
+      },
+      // rain
+      {
+        name: "rain-normal",
+        type: "texture",
+        path: "/assets/textures/rain-normal.png",
+      },
+      // shutter
+      {
+        name: "shutter-diffuse",
+        type: "texture",
+        path: "/assets/textures/door/shutter-Diffuse.png",
+      },
+      {
+        name: "shutter-glossiness",
+        type: "texture",
+        path: "/assets/textures/door/shutter-Glossiness.png",
+      },
+      {
+        name: "shutter-normal",
+        type: "texture",
+        path: "/assets/textures/door/shutter-Normal.png",
+      },
+      // top-cover
+      {
+        name: "top-cover-diffuse",
+        type: "texture",
+        path: "/assets/textures/door/top-cover-Diffuse.png",
+      },
+      // side-cover
+      {
+        name: "side-cover-diffuse",
+        type: "texture",
+        path: "/assets/textures/door/side-cover-Diffuse.png",
+      },
+    ]);
+
+    this.am = am;
+
+    am.on("ready", async () => {
+      // document.querySelector(".loader-screen").classList.add("hollow");
+
+      const sound = new Howl({
+          src: ['/assets/sound/rain.mp3'],
+          loop: true,
+          autoplay: true,
+          rate: config.soundRate
+      })
+
+      // lights
+      const pointLight1 = new THREE.PointLight("#81C8F2", 0.1, 17, 0.8);
+      pointLight1.position.set(0, 2.3, 0);
+      this.scene.add(pointLight1);
+
+      const pointLight2 = new THREE.PointLight("#81C8F2", 4, 30);
+      pointLight2.position.set(0, 30, 0);
+      this.scene.add(pointLight2);
+
+      const rectLight1 = new THREE.RectAreaLight("#81C8F2", 66, 19.1, 0.2);
+      rectLight1.position.set(0, 8.066, -9.8);
+      rectLight1.rotation.set(
+        THREE.MathUtils.degToRad(90),
+        THREE.MathUtils.degToRad(180),
+        0
+      );
+      this.scene.add(rectLight1);
+
+      const rectLight1Helper = new kokomi.RectAreaLightHelper(rectLight1);
+      this.scene.add(rectLight1Helper);
+
+      RectAreaLightUniformsLib.init();
+
+      // brick
+      const brickTex = am.items["brick-normal"];
+      brickTex.rotation = THREE.MathUtils.degToRad(90);
+      brickTex.wrapS = brickTex.wrapT = THREE.RepeatWrapping;
+      brickTex.repeat.set(5, 8);
+
+      // shutter
+      const shutterDiffuseTex = am.items["shutter-diffuse"];
+      shutterDiffuseTex.flipY = !1;
+
+      const shutterGlossinessTex = am.items["shutter-glossiness"];
+      shutterGlossinessTex.flipY = !1;
+
+      const shutterNormalTex = am.items["shutter-normal"];
+      shutterNormalTex.flipY = !1;
+
+      // top-cover
+      const topCoverTex = am.items["top-cover-diffuse"];
+      topCoverTex.flipY = !1;
+
+      // side-cover
+      const sideCoverTex = am.items["side-cover-diffuse"];
+      sideCoverTex.flipY = !1;
+      // model
+      const gtlfLoader = new GLTFLoader();
+      const url = "/assets/models/scene.glb";
+      gtlfLoader.load(url, (gltf) => {
+        const root = gltf.scene;
+
+        const walls = root.getObjectByName("walls");
+        walls.material = new THREE.MeshPhongMaterial({
+          color: new THREE.Color("#111111"),
+          normalMap: brickTex,
+          normalScale: new THREE.Vector2(0.5, 0.5),
+          shininess: 50,
+        });
+
+        const shutter = root.getObjectByName("shutter");
+        shutter.material = new THREE.MeshPhysicalMaterial({
+          map: shutterDiffuseTex,
+          roughnessMap: shutterGlossinessTex,
+          normalMap: shutterNormalTex,
+          reflectivity: 0.8,
+          roughness: 0.5,
+          metalness: 0.3,
+          specularIntensity: 0.5,
+        });
+
+        const topCover = root.getObjectByName("top-cover");
+        topCover.material = new THREE.MeshPhysicalMaterial({
+          map: topCoverTex,
+          reflectivity: 0.7,
+          metalness: 0.2,
+          specularIntensity: 0.5,
+        });
+
+        const sideCover = root.getObjectByName("side-cover");
+        sideCover.material = new THREE.MeshPhysicalMaterial({
+          map: sideCoverTex,
+          reflectivity: 0.7,
+          metalness: 0.2,
+          specularIntensity: 0.5,
+        });
+
+        const floor = root.getObjectByName("floor");
+        root.remove(floor);
+
+        const uNeon = root.getObjectByName("u-neon");
+        root.remove(uNeon);
+
+        const cable = root.getObjectByName("cable");
+        root.remove(cable);
+
+        const power = root.getObjectByName("power");
+        root.remove(power);
+
+        const stand = root.getObjectByName("stand");
+        root.remove(stand);
+
+        this.scene.add(root);
+      });
+
+      // rain floor
+      const rainFloor = new RainFloor(this, {
+        count: config.rainCount,
+      });
+      rainFloor.addExisting();
+
+      // rain
+      const rain = new Rain(this, {
+        speed: config.rainSpeed,
+        count: config.rainCount,
+        debug: false,
+      });
+      rain.addExisting();
+
+      rainFloor.mirror.ignoreObjects.push(rain.rain);
+
+      // flicker
+      const turnOffLight = () => {
+        rectLight1.color.copy(new THREE.Color("#000"));
+      };
+
+      const turnOnLight = () => {
+        rectLight1.color.copy(new THREE.Color("#81C8F2"));
+      };
+
+      let flickerTimer = null;
+
+      const flicker = () => {
+        flickerTimer = setInterval(async () => {
+          const rate = Math.random();
+          if (rate < 0.5) {
+            turnOffLight();
+            await kokomi.sleep(200 * Math.random());
+            turnOnLight();
+            await kokomi.sleep(200 * Math.random());
+            turnOffLight();
+            await kokomi.sleep(200 * Math.random());
+            turnOnLight();
+          }
+        }, 3000);
+      };
+
+      flicker();
+
+      // postprocessing
+      const composer = new EffectComposer(this.renderer);
+      this.composer = composer;
+
+      composer.addPass(new RenderPass(this.scene, this.camera));
+
+      // bloom
+      const bloom = new BloomEffect({
+        luminanceThreshold: 0.4,
+        luminanceSmoothing: 0,
+        mipmapBlur: true,
+        intensity: 2,
+        radius: 0.4,
+      });
+      composer.addPass(new EffectPass(this.camera, bloom));
+
+      // antialiasing
+      const fxaa = new FXAAEffect();
+      composer.addPass(new EffectPass(this.camera, fxaa));
+
+      // camera rotate
+      const smoothMouse = [new THREE.Vector2(0, 0), new THREE.Vector2(0, 0)];
+      const mouseMoveAngle = new THREE.Vector2(0.5, 0.08);
+
+      const euler = new THREE.Euler(0, 0, 0, "XYZ");
+      const quaternion = new THREE.Quaternion();
+
+      const clock = new THREE.Clock();
+
+      
+
+      this.update(() => {
+          rain.rain.material.uniforms.uTime.value += clock.getDelta() * config.rainSpeed
+          rainFloor.mirror.material.uniforms.iTime.value = rainFloor.mirror.material.uniforms.iTime.value/config.slowMoFactor
+
+          smoothMouse[0].lerp({ x: mouseX, y: mouseY }, 0.03);
+          smoothMouse[1].lerp({ x: mouseX, y: mouseY }, 0.07);
+          this.camera.position.copy(new THREE.Vector3(0, 2, 0));
+          this.camera.lookAt(lookAt);
+
+          if (!controls.controls.enabled) {
+              this.camera.translateZ(-2);``
+              euler.set(smoothMouse[0].y * mouseMoveAngle.y, -smoothMouse[0].x * mouseMoveAngle.x, 0);
+              quaternion.setFromEuler(euler);
+
+              this.camera.quaternion.multiply(quaternion);
+              euler.set(0, 0, (smoothMouse[0].x - smoothMouse[1].x) * -0.1);
+              quaternion.setFromEuler(euler);
+
+              this.camera.quaternion.multiply(quaternion);
+              this.camera.translateZ(config.cameraZOffset);
+              this.camera.updateMatrixWorld();
+          }
+
+          if (isSlowMo && flag) {
+              gsap.timeline({
+                  defaults: {
+                      duration: 2,
+                      ease: 'power2.out',
+                      overwrite: true
+                  }
+              }).to(config, {
+                  slowMoFactor: 10,
+                  rainSpeed: 0.02,
+                  cameraZOffset: 5,
+                  soundRate: 0.1,
+                  onUpdate: () => {
+                      sound.rate(config.soundRate)
+                  }
+              })
+
+              flag = false
+          }
+          else if (flag) {
+            gsap.timeline({
+              defaults: {
+                  duration: 1,
+                  ease: 'power2.inOut',
+                  overwrite: true
+              }
+              }).to(config, {
+                  slowMoFactor: 1,
+                  rainSpeed: 1.5,
+                  cameraZOffset: 10,
+                  soundRate: 1,
+                  onUpdate: () => {
+                    sound.rate(config.soundRate)
+                }
+              })
+
+              flag = false
+          }
+      });
+    });
+  }
+}
+
+const createSketch = () => {
+    const sketch = new Sketch();
+    sketch.create();
+    return sketch;
+};
+
+createSketch();
