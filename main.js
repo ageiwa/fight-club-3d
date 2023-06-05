@@ -300,565 +300,566 @@ void main() {
 `;
 
 let mouseX = 0,
-  mouseY = 0,
-  isSlowMo = false,
-  flag = false
+    mouseY = 0,
+    isSlowMo = false,
+    flag = false
 
 window.addEventListener("mousemove", (event) => {
-  mouseX = (event.clientX / window.innerWidth) * 2 - 1;
-  mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
-});
+    mouseX = (event.clientX / window.innerWidth) * 2 - 1
+    mouseY = -(event.clientY / window.innerHeight) * 2 + 1
+})
 
 window.addEventListener("mousedown", () => {
-  isSlowMo = true
-  flag = true
-});
+    isSlowMo = true
+    flag = true
+})
 
 window.addEventListener("mouseup", () => {
-  isSlowMo = false
-  flag = true
-});
+    isSlowMo = false
+    flag = true
+})
 
 class RainFloor extends kokomi.Component {
-  constructor(base, config = {}) {
-    super(base);
+    constructor(base, config = {}) {
+        super(base)
 
-    const { count = 1000 } = config;
+        const { count = 1000 } = config;
 
-    const am = this.base.am;
+        const am = this.base.am;
 
-    // floor
-    const fNormalTex = am.items["floor-normal"];
-    const fOpacityTex = am.items["floor-opacity"];
-    const fRoughnessTex = am.items["floor-roughness"];
-    fNormalTex.wrapS = fNormalTex.wrapT = THREE.MirroredRepeatWrapping;
-    fOpacityTex.wrapS = fOpacityTex.wrapT = THREE.MirroredRepeatWrapping;
-    fRoughnessTex.wrapS = fRoughnessTex.wrapT = THREE.MirroredRepeatWrapping;
+        // floor
+        const fNormalTex = am.items["floor-normal"];
+        const fOpacityTex = am.items["floor-opacity"];
+        const fRoughnessTex = am.items["floor-roughness"];
+        fNormalTex.wrapS = fNormalTex.wrapT = THREE.MirroredRepeatWrapping;
+        fOpacityTex.wrapS = fOpacityTex.wrapT = THREE.MirroredRepeatWrapping;
+        fRoughnessTex.wrapS = fRoughnessTex.wrapT = THREE.MirroredRepeatWrapping;
 
-    // custom reflector
-    const uj = new kokomi.UniformInjector(this.base);
-    this.uj = uj;
-    const mirror = new kokomi.Reflector(new THREE.PlaneGeometry(25, 100));
-    this.mirror = mirror;
-    mirror.position.z = -25;
-    mirror.rotation.x = -Math.PI / 2;
+        // custom reflector
+        const uj = new kokomi.UniformInjector(this.base);
+        this.uj = uj;
+        const mirror = new kokomi.Reflector(new THREE.PlaneGeometry(25, 100));
+        this.mirror = mirror;
+        mirror.position.z = -25;
+        mirror.rotation.x = -Math.PI / 2;
 
-    // console.log(uj)
+        mirror.material.uniforms = {
+            ...mirror.material.uniforms,
+            ...uj.shadertoyUniforms,
+            ...{
+                uNormalTexture: {
+                    value: fNormalTex,
+                },
+                uOpacityTexture: {
+                    value: fOpacityTex,
+                },
+                uRoughnessTexture: {
+                    value: fRoughnessTex,
+                },
+                uRainCount: {
+                    value: count,
+                },
+                uTexScale: {
+                    value: new THREE.Vector2(1, 4),
+                },
+                uTexOffset: {
+                    value: new THREE.Vector2(1, -0.5),
+                },
+                uDistortionAmount: {
+                    value: 0.25,
+                },
+                uBlurStrength: {
+                    value: 8,
+                },
+                uMipmapTextureSize: {
+                    value: new THREE.Vector2(window.innerWidth, window.innerHeight),
+                },
+            },
+        };
+        mirror.material.vertexShader = vertexShader;
+        mirror.material.fragmentShader = fragmentShader;
 
-    mirror.material.uniforms = {
-      ...mirror.material.uniforms,
-      ...uj.shadertoyUniforms,
-      ...{
-        uNormalTexture: {
-          value: fNormalTex,
-        },
-        uOpacityTexture: {
-          value: fOpacityTex,
-        },
-        uRoughnessTexture: {
-          value: fRoughnessTex,
-        },
-        uRainCount: {
-          value: count,
-        },
-        uTexScale: {
-          value: new THREE.Vector2(1, 4),
-        },
-        uTexOffset: {
-          value: new THREE.Vector2(1, -0.5),
-        },
-        uDistortionAmount: {
-          value: 0.25,
-        },
-        uBlurStrength: {
-          value: 8,
-        },
-        uMipmapTextureSize: {
-          value: new THREE.Vector2(window.innerWidth, window.innerHeight),
-        },
-      },
-    };
-    mirror.material.vertexShader = vertexShader;
-    mirror.material.fragmentShader = fragmentShader;
+        const mipmapper = new kokomi.PackedMipMapGenerator();
+        this.mipmapper = mipmapper;
+        const mirrorFBO = mirror.getRenderTarget();
+        this.mirrorFBO = mirrorFBO;
+        const mipmapFBO = new kokomi.FBO(this.base);
+        this.mipmapFBO = mipmapFBO;
 
-    const mipmapper = new kokomi.PackedMipMapGenerator();
-    this.mipmapper = mipmapper;
-    const mirrorFBO = mirror.getRenderTarget();
-    this.mirrorFBO = mirrorFBO;
-    const mipmapFBO = new kokomi.FBO(this.base);
-    this.mipmapFBO = mipmapFBO;
-
-    mirror.material.uniforms.tDiffuse.value = mipmapFBO.rt.texture;
+        mirror.material.uniforms.tDiffuse.value = mipmapFBO.rt.texture;
   }
   addExisting() {
-    this.base.scene.add(this.mirror);
+        this.base.scene.add(this.mirror);
   }
   update() {
-    this.uj.injectShadertoyUniforms(this.mirror.material.uniforms);
+        this.uj.injectShadertoyUniforms(this.mirror.material.uniforms);
 
-    this.mipmapper.update(
-      this.mirrorFBO.texture,
-      this.mipmapFBO.rt,
-      this.base.renderer
-    );
+        this.mipmapper.update(
+            this.mirrorFBO.texture,
+            this.mipmapFBO.rt,
+            this.base.renderer
+        );
   }
 }
 
 class Rain extends kokomi.Component {
-  constructor(base, config = {}) {
-    super(base);
+    constructor(base, config = {}) {
+        super(base);
 
-    const { count = 1000, speed = 1.5, debug = false } = config;
+        const { count = 1000, speed = 1.5, debug = false } = config;
 
-    const am = this.base.am;
+        const am = this.base.am;
 
-    // rain
-    const rNormalTex = am.items["rain-normal"];
-    rNormalTex.flipY = false;
+        // rain
+        const rNormalTex = am.items["rain-normal"];
+        rNormalTex.flipY = false;
 
-    const uj = new kokomi.UniformInjector(this.base);
+        const uj = new kokomi.UniformInjector(this.base);
 
-    this.uj = uj;
-    const rainMat = new THREE.ShaderMaterial({
-      vertexShader: vertexShader2,
-      fragmentShader: fragmentShader2,
-      uniforms: {
-        ...uj.shadertoyUniforms,
-        ...{
-          uHeightRange: {
-            value: 20,
-          },
-          uNormalTexture: {
-            value: rNormalTex,
-          },
-          uBgTexture: {
-            value: null,
-          },
-          uBgRt: {
-            value: null,
-          },
-          uRefraction: {
-            value: 0.05,
-          },
-          uBaseBrightness: {
-            value: 0.07,
-          },
-          uTime: {
-            value: 0,
-          },
+        this.uj = uj;
+        const rainMat = new THREE.ShaderMaterial({
+        vertexShader: vertexShader2,
+        fragmentShader: fragmentShader2,
+        uniforms: {
+            ...uj.shadertoyUniforms,
+            ...{
+                uHeightRange: {
+                    value: 20,
+                },
+                uNormalTexture: {
+                    value: rNormalTex,
+                },
+                uBgTexture: {
+                    value: null,
+                },
+                uBgRt: {
+                    value: null,
+                },
+                uRefraction: {
+                    value: 0.05,
+                },
+                uBaseBrightness: {
+                    value: 0.07,
+                },
+                uTime: {
+                    value: 0,
+                },
+            },
         },
-      },
-    });
-    this.rainMat = rainMat;
+        })
+        this.rainMat = rainMat
 
-    const rain = new THREE.InstancedMesh(
-      new THREE.PlaneGeometry(),
-      rainMat,
-      count
-    );
-    this.rain = rain;
-    rain.instanceMatrix.needsUpdate = true;
+        const rain = new THREE.InstancedMesh(
+            new THREE.PlaneGeometry(),
+            rainMat,
+            count
+        )
+        this.rain = rain
+        rain.instanceMatrix.needsUpdate = true
 
-    const dummy = new THREE.Object3D();
+        const dummy = new THREE.Object3D()
 
-    const progressArr = [];
-    const speedArr = [];
+        const progressArr = []
+        const speedArr = []
 
-    for (let i = 0; i < rain.count; i++) {
-      dummy.position.set(
-        THREE.MathUtils.randFloat(-10, 10),
-        0,
-        THREE.MathUtils.randFloat(-20, 10)
-      );
-      dummy.scale.set(0.03, THREE.MathUtils.randFloat(0.3, 0.5), 0.03);
-      if (debug) {
-        dummy.scale.setScalar(1);
-        rainMat.uniforms.uSpeed.value = 0;
-      }
-      dummy.updateMatrix();
-      rain.setMatrixAt(i, dummy.matrix);
+        for (let i = 0; i < rain.count; i++) {
+            dummy.position.set(
+                THREE.MathUtils.randFloat(-10, 10),
+                0,
+                THREE.MathUtils.randFloat(-20, 10)
+            );
+            dummy.scale.set(0.03, THREE.MathUtils.randFloat(0.3, 0.5), 0.03);
+            if (debug) {
+                dummy.scale.setScalar(1);
+                rainMat.uniforms.uSpeed.value = 0;
+            }
+            dummy.updateMatrix();
+            rain.setMatrixAt(i, dummy.matrix);
 
-      progressArr.push(Math.random());
-      speedArr.push(dummy.scale.y * 10);
+            progressArr.push(Math.random());
+            speedArr.push(dummy.scale.y * 10);
+        }
+
+        rain.rotation.set(-0.1, 0, 0.1);
+        rain.position.set(0, 9, 9);
+
+        rain.geometry.setAttribute(
+            "aProgress",
+            new THREE.InstancedBufferAttribute(new Float32Array(progressArr), 1)
+        );
+        rain.geometry.setAttribute(
+            "aSpeed",
+            new THREE.InstancedBufferAttribute(new Float32Array(speedArr), 1)
+        );
+
+        const bgFBO = new kokomi.FBO(this.base, {
+            width: window.innerWidth * 0.1,
+            height: window.innerHeight * 0.1,
+        })
+
+        this.bgFBO = bgFBO
+        rainMat.uniforms.uBgTexture.value = bgFBO.rt.texture
+
+        const fboCamera = this.base.camera.clone()
+        this.fboCamera = fboCamera
     }
-    rain.rotation.set(-0.1, 0, 0.1);
-    rain.position.set(0, 9, 9);
+    addExisting() {
+        this.base.scene.add(this.rain)
+    }
+    update() {
+        this.uj.injectShadertoyUniforms(this.rainMat.uniforms)
 
-    rain.geometry.setAttribute(
-      "aProgress",
-      new THREE.InstancedBufferAttribute(new Float32Array(progressArr), 1)
-    );
-    rain.geometry.setAttribute(
-      "aSpeed",
-      new THREE.InstancedBufferAttribute(new Float32Array(speedArr), 1)
-    );
-
-    const bgFBO = new kokomi.FBO(this.base, {
-      width: window.innerWidth * 0.1,
-      height: window.innerHeight * 0.1,
-    });
-    this.bgFBO = bgFBO;
-    rainMat.uniforms.uBgTexture.value = bgFBO.rt.texture;
-
-    const fboCamera = this.base.camera.clone();
-    this.fboCamera = fboCamera;
-  }
-  addExisting() {
-    this.base.scene.add(this.rain);
-  }
-  update() {
-    this.uj.injectShadertoyUniforms(this.rainMat.uniforms);
-
-    this.rain.visible = false;
-    this.base.renderer.setRenderTarget(this.bgFBO.rt);
-    this.base.renderer.render(this.base.scene, this.fboCamera);
-    this.base.renderer.setRenderTarget(null);
-    this.rain.visible = true;
-  }
+        this.rain.visible = false
+        this.base.renderer.setRenderTarget(this.bgFBO.rt)
+        this.base.renderer.render(this.base.scene, this.fboCamera)
+        this.base.renderer.setRenderTarget(null)
+        this.rain.visible = true
+    }
 }
 
 class Sketch extends kokomi.Base {
-  create() {
-    this.camera.position.set(0, 2, 9);
+    create() {
+        this.camera.position.set(0, 2, 9);
 
-    const lookAt = new THREE.Vector3(0, 2, 0);
-    this.camera.lookAt(lookAt);
+        const lookAt = new THREE.Vector3(0, 2, 0);
+        this.camera.lookAt(lookAt);
 
-    const controls = new kokomi.OrbitControls(this);
-    controls.controls.target = lookAt;
-    controls.controls.enabled = false;
+        const controls = new kokomi.OrbitControls(this);
+        controls.controls.target = lookAt;
+        controls.controls.enabled = false;
 
-    // config
-    const config = {
-      rainCount: 1000,
-      slowMoFactor: 1,
-      rainSpeed: 1.5,
-      debug: false,
-      soundRate: 1,
-      cameraZOffset: 10,
-    };
+        // config
+        const config = {
+            rainCount: 1000,
+            slowMoFactor: 1,
+            rainSpeed: 1.5,
+            debug: false,
+            soundRate: 1,
+            cameraZOffset: 10,
+        };
 
-    const am = new kokomi.AssetManager(this, [
-      // brick
-      {
-        name: "brick-normal",
-        type: "texture",
-        path: "/assets/textures/brick-normal2.jpg",
-      },
-      // floor
-      {
-        name: "floor-normal",
-        type: "texture",
-        path: "/assets/textures/asphalt-pbr01/normal.png",
-      },
-      {
-        name: "floor-opacity",
-        type: "texture",
-        path: "/assets/textures/asphalt-pbr01/opacity.jpg",
-      },
-      {
-        name: "floor-roughness",
-        type: "texture",
-        path: "/assets/textures/asphalt-pbr01/roughness.jpg",
-      },
-      // rain
-      {
-        name: "rain-normal",
-        type: "texture",
-        path: "/assets/textures/rain-normal.png",
-      },
-      // shutter
-      {
-        name: "shutter-diffuse",
-        type: "texture",
-        path: "/assets/textures/door/shutter-Diffuse.png",
-      },
-      {
-        name: "shutter-glossiness",
-        type: "texture",
-        path: "/assets/textures/door/shutter-Glossiness.png",
-      },
-      {
-        name: "shutter-normal",
-        type: "texture",
-        path: "/assets/textures/door/shutter-Normal.png",
-      },
-      // top-cover
-      {
-        name: "top-cover-diffuse",
-        type: "texture",
-        path: "/assets/textures/door/top-cover-Diffuse.png",
-      },
-      // side-cover
-      {
-        name: "side-cover-diffuse",
-        type: "texture",
-        path: "/assets/textures/door/side-cover-Diffuse.png",
-      },
-    ]);
+        const am = new kokomi.AssetManager(this, [
+            // brick
+            {
+                name: "brick-normal",
+                type: "texture",
+                path: "/assets/textures/brick-normal2.jpg",
+            },
+            // floor
+            {
+                name: "floor-normal",
+                type: "texture",
+                path: "/assets/textures/asphalt-pbr01/normal.png",
+            },
+            {
+                name: "floor-opacity",
+                type: "texture",
+                path: "/assets/textures/asphalt-pbr01/opacity.jpg",
+            },
+            {
+                name: "floor-roughness",
+                type: "texture",
+                path: "/assets/textures/asphalt-pbr01/roughness.jpg",
+            },
+            // rain
+            {
+                name: "rain-normal",
+                type: "texture",
+                path: "/assets/textures/rain-normal.png",
+            },
+            // shutter
+            {
+                name: "shutter-diffuse",
+                type: "texture",
+                path: "/assets/textures/door/shutter-Diffuse.png",
+            },
+            {
+                name: "shutter-glossiness",
+                type: "texture",
+                path: "/assets/textures/door/shutter-Glossiness.png",
+            },
+            {
+                name: "shutter-normal",
+                type: "texture",
+                path: "/assets/textures/door/shutter-Normal.png",
+            },
+            // top-cover
+            {
+                name: "top-cover-diffuse",
+                type: "texture",
+                path: "/assets/textures/door/top-cover-Diffuse.png",
+            },
+            // side-cover
+            {
+                name: "side-cover-diffuse",
+                type: "texture",
+                path: "/assets/textures/door/side-cover-Diffuse.png",
+            },
+        ])
 
-    this.am = am;
+        this.am = am
 
-    am.on("ready", async () => {
-      // document.querySelector(".loader-screen").classList.add("hollow");
+        am.on("ready", async () => {
+            // document.querySelector(".loader-screen").classList.add("hollow");
 
-      const sound = new Howl({
-          src: ['/assets/sound/rain.mp3'],
-          loop: true,
-          autoplay: true,
-          rate: config.soundRate
-      })
+            const sound = new Howl({
+                src: ['/assets/sound/rain.mp3'],
+                loop: true,
+                autoplay: true,
+                rate: config.soundRate
+            })
 
-      // lights
-      const pointLight1 = new THREE.PointLight("#81C8F2", 0.1, 17, 0.8);
-      pointLight1.position.set(0, 2.3, 0);
-      this.scene.add(pointLight1);
+            // lights
+            const pointLight1 = new THREE.PointLight("#81C8F2", 0.1, 17, 0.8)
+            pointLight1.position.set(0, 2.3, 0)
+            this.scene.add(pointLight1)
 
-      const pointLight2 = new THREE.PointLight("#81C8F2", 4, 30);
-      pointLight2.position.set(0, 30, 0);
-      this.scene.add(pointLight2);
+            const pointLight2 = new THREE.PointLight("#81C8F2", 2, 30)
+            pointLight2.position.set(0, 30, 0)
+            this.scene.add(pointLight2)
 
-      const rectLight1 = new THREE.RectAreaLight("#81C8F2", 66, 19.1, 0.2);
-      rectLight1.position.set(0, 8.066, -9.8);
-      rectLight1.rotation.set(
-        THREE.MathUtils.degToRad(90),
-        THREE.MathUtils.degToRad(180),
-        0
-      );
-      this.scene.add(rectLight1);
+            const rectLight1 = new THREE.RectAreaLight("#81C8F2", 66, 19.1, 0.2)
+            rectLight1.position.set(0, 8.066, -9.8)
+            rectLight1.rotation.set(
+                THREE.MathUtils.degToRad(90),
+                THREE.MathUtils.degToRad(180),
+                0
+            )
+            this.scene.add(rectLight1)
 
-      const rectLight1Helper = new kokomi.RectAreaLightHelper(rectLight1);
-      this.scene.add(rectLight1Helper);
+            const rectLight1Helper = new kokomi.RectAreaLightHelper(rectLight1)
+            this.scene.add(rectLight1Helper)
 
-      RectAreaLightUniformsLib.init();
+            RectAreaLightUniformsLib.init()
 
-      // brick
-      const brickTex = am.items["brick-normal"];
-      brickTex.rotation = THREE.MathUtils.degToRad(90);
-      brickTex.wrapS = brickTex.wrapT = THREE.RepeatWrapping;
-      brickTex.repeat.set(5, 8);
+            // brick
+            const brickTex = am.items["brick-normal"]
+            brickTex.rotation = THREE.MathUtils.degToRad(90)
+            brickTex.wrapS = brickTex.wrapT = THREE.RepeatWrapping
+            brickTex.repeat.set(5, 8)
 
-      // shutter
-      const shutterDiffuseTex = am.items["shutter-diffuse"];
-      shutterDiffuseTex.flipY = !1;
+            // shutter
+            const shutterDiffuseTex = am.items["shutter-diffuse"]
+            shutterDiffuseTex.flipY = !1
 
-      const shutterGlossinessTex = am.items["shutter-glossiness"];
-      shutterGlossinessTex.flipY = !1;
+            const shutterGlossinessTex = am.items["shutter-glossiness"]
+            shutterGlossinessTex.flipY = !1
 
-      const shutterNormalTex = am.items["shutter-normal"];
-      shutterNormalTex.flipY = !1;
+            const shutterNormalTex = am.items["shutter-normal"]
+            shutterNormalTex.flipY = !1
 
-      // top-cover
-      const topCoverTex = am.items["top-cover-diffuse"];
-      topCoverTex.flipY = !1;
+            // top-cover
+            const topCoverTex = am.items["top-cover-diffuse"]
+            topCoverTex.flipY = !1
 
-      // side-cover
-      const sideCoverTex = am.items["side-cover-diffuse"];
-      sideCoverTex.flipY = !1;
-      // model
-      const gtlfLoader = new GLTFLoader();
-      const url = "/assets/models/scene.glb";
-      gtlfLoader.load(url, (gltf) => {
-        const root = gltf.scene;
+            // side-cover
+            const sideCoverTex = am.items["side-cover-diffuse"]
+            sideCoverTex.flipY = !1
 
-        const walls = root.getObjectByName("walls");
-        walls.material = new THREE.MeshPhongMaterial({
-          color: new THREE.Color("#111111"),
-          normalMap: brickTex,
-          normalScale: new THREE.Vector2(0.5, 0.5),
-          shininess: 50,
-        });
+            // model
+            const gtlfLoader = new GLTFLoader();
+            const url = "/assets/models/scene.glb";
+            gtlfLoader.load(url, (gltf) => {
+                const root = gltf.scene
 
-        const shutter = root.getObjectByName("shutter");
-        shutter.material = new THREE.MeshPhysicalMaterial({
-          map: shutterDiffuseTex,
-          roughnessMap: shutterGlossinessTex,
-          normalMap: shutterNormalTex,
-          reflectivity: 0.8,
-          roughness: 0.5,
-          metalness: 0.3,
-          specularIntensity: 0.5,
-        });
+                const walls = root.getObjectByName("walls");
+                walls.material = new THREE.MeshPhongMaterial({
+                    color: new THREE.Color("#111111"),
+                    normalMap: brickTex,
+                    normalScale: new THREE.Vector2(0.5, 0.5),
+                    shininess: 50,
+                })
 
-        const topCover = root.getObjectByName("top-cover");
-        topCover.material = new THREE.MeshPhysicalMaterial({
-          map: topCoverTex,
-          reflectivity: 0.7,
-          metalness: 0.2,
-          specularIntensity: 0.5,
-        });
+                const shutter = root.getObjectByName("shutter");
+                shutter.material = new THREE.MeshPhysicalMaterial({
+                    map: shutterDiffuseTex,
+                    roughnessMap: shutterGlossinessTex,
+                    normalMap: shutterNormalTex,
+                    reflectivity: 0.8,
+                    roughness: 0.5,
+                    metalness: 0.3,
+                    specularIntensity: 0.5,
+                })
 
-        const sideCover = root.getObjectByName("side-cover");
-        sideCover.material = new THREE.MeshPhysicalMaterial({
-          map: sideCoverTex,
-          reflectivity: 0.7,
-          metalness: 0.2,
-          specularIntensity: 0.5,
-        });
+                const topCover = root.getObjectByName("top-cover");
+                topCover.material = new THREE.MeshPhysicalMaterial({
+                    map: topCoverTex,
+                    reflectivity: 0.7,
+                    metalness: 0.2,
+                    specularIntensity: 0.5,
+                })
 
-        const floor = root.getObjectByName("floor");
-        root.remove(floor);
+                const sideCover = root.getObjectByName("side-cover");
+                sideCover.material = new THREE.MeshPhysicalMaterial({
+                    map: sideCoverTex,
+                    reflectivity: 0.7,
+                    metalness: 0.2,
+                    specularIntensity: 0.5,
+                });
 
-        const uNeon = root.getObjectByName("u-neon");
-        root.remove(uNeon);
+                const floor = root.getObjectByName("floor");
+                root.remove(floor);
 
-        const cable = root.getObjectByName("cable");
-        root.remove(cable);
+                const uNeon = root.getObjectByName("u-neon");
+                root.remove(uNeon);
 
-        const power = root.getObjectByName("power");
-        root.remove(power);
+                const cable = root.getObjectByName("cable");
+                root.remove(cable);
 
-        const stand = root.getObjectByName("stand");
-        root.remove(stand);
+                const power = root.getObjectByName("power");
+                root.remove(power);
 
-        this.scene.add(root);
-      });
+                const stand = root.getObjectByName("stand");
+                root.remove(stand);
 
-      // rain floor
-      const rainFloor = new RainFloor(this, {
-        count: config.rainCount,
-      });
-      rainFloor.addExisting();
+                this.scene.add(root);
+            })
 
-      // rain
-      const rain = new Rain(this, {
-        speed: config.rainSpeed,
-        count: config.rainCount,
-        debug: false,
-      });
-      rain.addExisting();
+            // rain floor
+            const rainFloor = new RainFloor(this, {
+                count: config.rainCount,
+            })
+            rainFloor.addExisting()
 
-      rainFloor.mirror.ignoreObjects.push(rain.rain);
+            // rain
+            const rain = new Rain(this, {
+                speed: config.rainSpeed,
+                count: config.rainCount,
+                debug: false,
+            })
+            rain.addExisting()
 
-      // flicker
-      const turnOffLight = () => {
-        rectLight1.color.copy(new THREE.Color("#000"));
-      };
+            rainFloor.mirror.ignoreObjects.push(rain.rain)
 
-      const turnOnLight = () => {
-        rectLight1.color.copy(new THREE.Color("#81C8F2"));
-      };
+            // flicker
+            const turnOffLight = () => {
+                rectLight1.color.copy(new THREE.Color("#000"))
+            }
 
-      let flickerTimer = null;
+            const turnOnLight = () => {
+                rectLight1.color.copy(new THREE.Color("#81C8F2"))
+            }
 
-      const flicker = () => {
-        flickerTimer = setInterval(async () => {
-          const rate = Math.random();
-          if (rate < 0.5) {
-            turnOffLight();
-            await kokomi.sleep(200 * Math.random());
-            turnOnLight();
-            await kokomi.sleep(200 * Math.random());
-            turnOffLight();
-            await kokomi.sleep(200 * Math.random());
-            turnOnLight();
-          }
-        }, 3000);
-      };
+            let flickerTimer = null;
 
-      flicker();
+            const flicker = () => {
+                flickerTimer = setInterval(async () => {
+                const rate = Math.random()
+                if (rate < 0.5) {
+                    turnOffLight()
+                    await kokomi.sleep(200 * Math.random())
+                    turnOnLight()
+                    await kokomi.sleep(200 * Math.random())
+                    turnOffLight()
+                    await kokomi.sleep(200 * Math.random())
+                    turnOnLight()
+                }
+                }, 3000)
+            }
 
-      // postprocessing
-      const composer = new EffectComposer(this.renderer);
-      this.composer = composer;
+            flicker()
 
-      composer.addPass(new RenderPass(this.scene, this.camera));
+            // postprocessing
+            const composer = new EffectComposer(this.renderer)
+            this.composer = composer
 
-      // bloom
-      const bloom = new BloomEffect({
-        luminanceThreshold: 0.4,
-        luminanceSmoothing: 0,
-        mipmapBlur: true,
-        intensity: 2,
-        radius: 0.4,
-      });
-      composer.addPass(new EffectPass(this.camera, bloom));
+            composer.addPass(new RenderPass(this.scene, this.camera))
 
-      // antialiasing
-      const fxaa = new FXAAEffect();
-      composer.addPass(new EffectPass(this.camera, fxaa));
+            // bloom
+            const bloom = new BloomEffect({
+                luminanceThreshold: 0.4,
+                luminanceSmoothing: 0,
+                mipmapBlur: true,
+                intensity: 2,
+                radius: 0.4,
+            })
+            composer.addPass(new EffectPass(this.camera, bloom))
 
-      // camera rotate
-      const smoothMouse = [new THREE.Vector2(0, 0), new THREE.Vector2(0, 0)];
-      const mouseMoveAngle = new THREE.Vector2(0.5, 0.08);
+            // antialiasing
+            const fxaa = new FXAAEffect()
+            composer.addPass(new EffectPass(this.camera, fxaa))
 
-      const euler = new THREE.Euler(0, 0, 0, "XYZ");
-      const quaternion = new THREE.Quaternion();
+            // camera rotate
+            const smoothMouse = [new THREE.Vector2(0, 0), new THREE.Vector2(0, 0)]
+            const mouseMoveAngle = new THREE.Vector2(0.5, 0.08)
 
-      const clock = new THREE.Clock();
+            const euler = new THREE.Euler(0, 0, 0, "XYZ")
+            const quaternion = new THREE.Quaternion()
+
+            const clock = new THREE.Clock()
 
       
 
-      this.update(() => {
-          rain.rain.material.uniforms.uTime.value += clock.getDelta() * config.rainSpeed
-          rainFloor.mirror.material.uniforms.iTime.value = rainFloor.mirror.material.uniforms.iTime.value/config.slowMoFactor
+            this.update(() => {
+                rain.rain.material.uniforms.uTime.value += clock.getDelta() * config.rainSpeed
+                rainFloor.mirror.material.uniforms.iTime.value = rainFloor.mirror.material.uniforms.iTime.value/config.slowMoFactor
 
-          smoothMouse[0].lerp({ x: mouseX, y: mouseY }, 0.03);
-          smoothMouse[1].lerp({ x: mouseX, y: mouseY }, 0.07);
-          this.camera.position.copy(new THREE.Vector3(0, 2, 0));
-          this.camera.lookAt(lookAt);
+                smoothMouse[0].lerp({ x: mouseX, y: mouseY }, 0.03);
+                smoothMouse[1].lerp({ x: mouseX, y: mouseY }, 0.07);
+                this.camera.position.copy(new THREE.Vector3(0, 2, 0));
+                this.camera.lookAt(lookAt);
 
-          if (!controls.controls.enabled) {
-              this.camera.translateZ(-2);``
-              euler.set(smoothMouse[0].y * mouseMoveAngle.y, -smoothMouse[0].x * mouseMoveAngle.x, 0);
-              quaternion.setFromEuler(euler);
+                if (!controls.controls.enabled) {
+                    this.camera.translateZ(-2);``
+                    euler.set(smoothMouse[0].y * mouseMoveAngle.y, -smoothMouse[0].x * mouseMoveAngle.x, 0);
+                    quaternion.setFromEuler(euler);
 
-              this.camera.quaternion.multiply(quaternion);
-              euler.set(0, 0, (smoothMouse[0].x - smoothMouse[1].x) * -0.1);
-              quaternion.setFromEuler(euler);
+                    this.camera.quaternion.multiply(quaternion);
+                    euler.set(0, 0, (smoothMouse[0].x - smoothMouse[1].x) * -0.1);
+                    quaternion.setFromEuler(euler);
 
-              this.camera.quaternion.multiply(quaternion);
-              this.camera.translateZ(config.cameraZOffset);
-              this.camera.updateMatrixWorld();
-          }
-
-          if (isSlowMo && flag) {
-              gsap.timeline({
-                  defaults: {
-                      duration: 2,
-                      ease: 'power2.out',
-                      overwrite: true
-                  }
-              }).to(config, {
-                  slowMoFactor: 10,
-                  rainSpeed: 0.02,
-                  cameraZOffset: 5,
-                  soundRate: 0.1,
-                  onUpdate: () => {
-                      sound.rate(config.soundRate)
-                  }
-              })
-
-              flag = false
-          }
-          else if (flag) {
-            gsap.timeline({
-              defaults: {
-                  duration: 1,
-                  ease: 'power2.inOut',
-                  overwrite: true
-              }
-              }).to(config, {
-                  slowMoFactor: 1,
-                  rainSpeed: 1.5,
-                  cameraZOffset: 10,
-                  soundRate: 1,
-                  onUpdate: () => {
-                    sound.rate(config.soundRate)
+                    this.camera.quaternion.multiply(quaternion);
+                    this.camera.translateZ(config.cameraZOffset);
+                    this.camera.updateMatrixWorld();
                 }
-              })
 
-              flag = false
-          }
-      });
-    });
-  }
+                if (isSlowMo && flag) {
+                    gsap.timeline({
+                        defaults: {
+                            duration: 2,
+                            ease: 'power2.out',
+                            overwrite: true
+                        }
+                    }).to(config, {
+                        slowMoFactor: 10,
+                        rainSpeed: 0.02,
+                        cameraZOffset: 5,
+                        soundRate: 0.1,
+                        onUpdate: () => {
+                            sound.rate(config.soundRate)
+                        }
+                    })
+
+                    flag = false
+                }
+                else if (flag) {
+                    gsap.timeline({
+                    defaults: {
+                        duration: 1,
+                        ease: 'power2.inOut',
+                        overwrite: true
+                    }
+                    }).to(config, {
+                        slowMoFactor: 1,
+                        rainSpeed: 1.5,
+                        cameraZOffset: 10,
+                        soundRate: 1,
+                        onUpdate: () => {
+                            sound.rate(config.soundRate)
+                        }
+                    })
+
+                    flag = false
+                }
+            })
+        })
+    }
 }
 
 const createSketch = () => {
-    const sketch = new Sketch();
-    sketch.create();
-    return sketch;
+    const sketch = new Sketch()
+    sketch.create()
+    return sketch
 };
 
-createSketch();
+createSketch()
